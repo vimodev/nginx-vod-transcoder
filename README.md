@@ -1,7 +1,7 @@
 nginx-vod-transcoder
 =======================
 
-Builds upon nytimes/nginx-vod-module to allow for just-in-time transcoding of hls segments.
+Builds upon nytimes/nginx-vod-module to allow for just-in-time transcoding of hls segments. Not robust at all and not production-ready in any case.
 
 Usage
 ----
