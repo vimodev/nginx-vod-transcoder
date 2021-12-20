@@ -9,7 +9,7 @@ Pull the image with `docker pull vimodev/nginx-vod-transcoder`.
 
 Run the image with `docker run --name transcoder -d -p 80:80 -v /path/to/your/videos/:/opt/static/videos:ro vimodev/nginx-vod-transcoder:latest`
 
-To use custom quality levels mount a `.json` as follows `docker run --name transcoder -d -p 80:80 -v /path/to/your/videos/:/opt/static/videos:ro -v /path/to/config.json:/transcoder/qualities.json vimodev/nginx-vod-transcoder:latest`. An example `json` configuration can be found in `exampleQualities.json`.
+To use custom quality levels mount a `.json` as follows `docker run --name transcoder -d -p 80:80 -v /path/to/your/videos/:/opt/static/videos:ro -v /path/to/config.json:/transcoder/qualities.json vimodev/nginx-vod-transcoder:latest`. An example `json` configuration can be found in `exampleQualities.json`. This is NOT robust.
 
 Input `http://<server>/hls/subfolder/video.mp4/master.m3u8` into any `hls` video player to play the video `/path/to/your/videos/subfolder/video.mp4`.
 
