@@ -186,8 +186,7 @@ function handleIndexRequest(req, res) {
     })
 }
 
-// Handle all requests that come through
-app.get('*', (req, res) => {
+function handleHLS(req, res) {
     let path = url.parse(req.url).pathname
     if (path.endsWith('.ts')) {
         handleSegmentRequest(req, res)
@@ -198,6 +197,29 @@ app.get('*', (req, res) => {
     } else {
         res.status(404)
     }
+}
+
+function proxy(req, res) {
+    let path = url.parse(req.url).pathname
+    const options = {
+        hostname: upstreamHostname,
+        port: upstreamPort,
+        path: path,
+        headers: {
+            Host: req.get("Host")
+        }
+    }
+    http.get(options, (response) => response.pipe(res))
+}
+
+// Handle all requests that come through
+app.get('*', (req, res) => {
+    let path = url.parse(req.url).pathname
+    if (path.startsWith('/hls')) {
+        handleHLS(req, res)
+    } else {
+        proxy(req, res)
+    } 
 })
 
 // Start the server
