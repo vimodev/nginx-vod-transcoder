@@ -9,6 +9,8 @@ Pull the image with `docker pull vimodev/nginx-vod-transcoder`.
 
 Run the image with `docker run --name transcoder -d -p 80:80 -v /path/to/your/videos/:/opt/static/videos:ro vimodev/nginx-vod-transcoder:latest`
 
+To use custom quality levels mount a `.json` as follows `docker run --name transcoder -d -p 80:80 -v /path/to/your/videos/:/opt/static/videos:ro -v /path/to/config.json:/transcoder/qualities.json vimodev/nginx-vod-transcoder:latest`. An example `json` configuration can be found in `exampleQualities.json`.
+
 Input `http://<server>/hls/subfolder/video.mp4/master.m3u8` into any `hls` video player to play the video `/path/to/your/videos/subfolder/video.mp4`.
 
 Has an internal cache where transcoded segments expire after 300 seconds with a max size of 5GB. `GET /cache` to query cache information including size and entries.
@@ -17,7 +19,7 @@ Has an internal cache where transcoded segments expire after 300 seconds with a 
 Detailed:
 
 
-Take an example video at `path/to/your/videos/subfolder/video.mp4`. We can then get the master `m3u8` playlist that contains the different qualities depending on the source quality. If the source video is 4Mbps, only options with a bitrate of lower than 4Mbps are available.
+Take an example video at `path/to/your/videos/subfolder/video.mp4`. We can then get the master `m3u8` playlist that contains the different qualities depending on the source quality. If the source video is 4Mbps for example, only options with a bitrate of lower than 4Mbps are available. The following qualities are in the default config. Source is always available and the first stream in the playlist regardless of mounted configuration.
 - Source: source
 - 360p: 640x360 @ 500 kbps
 - 720p: 1280x720 @ 1.5 Mbps
