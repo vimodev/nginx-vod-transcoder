@@ -8,13 +8,17 @@ const cors = require('cors')
 const { spawn } = require('child_process')
 const url = require('url')
 
-const upstream = 'http://localhost:8080'
 const upstreamHostname = 'localhost'
 const upstreamPort = 8080
 
 const app = express()
 app.use(cors())
 const port = 8081
+
+var cache = {}
+var cacheSize = 0
+var maximumCacheSize = 5000000000 // 5G
+const cacheTickInterval = 5000
 
 const qualities = {
     "360p": {
@@ -35,6 +39,57 @@ const qualities = {
     }
 }
 
+function tickCache(interval) {
+    for (let c in cache) {
+        cache[c].expiration -= interval
+        if (cache[c].expiration < 0) {
+            cacheSize -= cache[c].size
+            try {
+                fs.unlinkSync(cache[c].file)
+            } catch (err) {
+                console.log(err)
+            }
+            delete cache[c]
+        }
+    }
+    setTimeout(() => tickCache(cacheTickInterval), cacheTickInterval)
+}
+
+setTimeout(() => tickCache(cacheTickInterval), cacheTickInterval)
+
+function removeOldestCacheEntry() {
+    let minimum = 300001
+    let current = undefined
+    for (let c in cache) {
+        if (cache[c].expiration < minimum) {
+            minimum = cache[c].expiration
+            current = c
+        }
+    }
+    cacheSize -= cache[current].size
+    try {
+        fs.unlinkSync(cache[current].file)
+    } catch (err) {
+        console.log(err)
+    }
+    delete cache[current]
+}
+
+async function addToCache(url, file) {
+    console.log(`Adding ${url} to cache`)
+    var stats = fs.statSync(file)
+    cache[url] = {
+        expiration: 300000,
+        size: stats.size,
+        file: file
+    }
+    cacheSize += stats.size
+    while (cacheSize > maximumCacheSize) {
+        removeOldestCacheEntry()
+    }
+    console.log(`Cache size: ${cacheSize / 1000000}`)
+}
+
 // Pipe a stream into a string of utf-8
 function streamToString (stream) {
     const chunks = [];
@@ -47,6 +102,12 @@ function streamToString (stream) {
 
 function handleSegmentRequest(req, res) {
     console.log(`Handling segment request ${req.url}`)
+    if (req.url in cache) {
+        console.log(`Found ${req.url} in cache`)
+        cache[req.url].expiration = 300000
+        res.sendFile(cache[req.url].file)
+        return
+    }
     let quality = req.query.quality
     if (quality == undefined) quality = "Source"
     if (!(quality in qualities)) qual = "Source"
@@ -90,17 +151,13 @@ function handleSegmentRequest(req, res) {
             const child = spawn('ffmpeg', ['-i', tempFile, '-vcodec', 'libx264', '-b:v', `${q.bitrate}`,'-acodec', 'copy', '-s', q.resolution.replace('x', ':'), 
                                             '-copyts', '-muxdelay', '0', outFile])
             child.on('close', () => {
+                addToCache(req.url, outFile)
                 // Send the output
                 res.sendFile(outFile)
                 // Delete the files
                 setTimeout(() => {
                     try {
                         fs.unlinkSync(tempFile)
-                    } catch (err) {
-                        console.log(err)
-                    }
-                    try {
-                        fs.unlinkSync(outFile)
                     } catch (err) {
                         console.log(err)
                     }
@@ -217,6 +274,8 @@ app.get('*', (req, res) => {
     let path = url.parse(req.url).pathname
     if (path.startsWith('/hls')) {
         handleHLS(req, res)
+    } else if (path.startsWith('/cache')) {
+        res.json({size: cacheSize, cache: cache})
     } else {
         proxy(req, res)
     } 

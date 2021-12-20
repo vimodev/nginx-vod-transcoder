@@ -9,7 +9,9 @@ Pull the image with `docker pull vimodev/nginx-vod-transcoder`.
 
 Run the image with `docker run --name transcoder -d -p 80:80 -v /path/to/your/videos/:/opt/static/videos:ro vimodev/nginx-vod-transcoder:latest`
 
-Input `http://<server>/hls/subfolder/video.mp4/master.m3u8` into any `hls` video player to play the video `/path/to/your/videos//subfolder/video.mp4`.
+Input `http://<server>/hls/subfolder/video.mp4/master.m3u8` into any `hls` video player to play the video `/path/to/your/videos/subfolder/video.mp4`.
+
+Has an internal cache where transcoded segments expire after 300 seconds with a max size of 5GB. `GET /cache` to query cache information including size and entries.
 
 
 Detailed:
