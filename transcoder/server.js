@@ -20,24 +20,9 @@ var cacheSize = 0
 var maximumCacheSize = 5000000000 // 5G
 const cacheTickInterval = 5000
 
-const qualities = {
-    "360p": {
-        "bitrate": 500000,
-        "resolution": "640x360"
-    },
-    "720p": {
-        "bitrate": 1500000,
-        "resolution": "1280x720"
-    },
-    "1080p": {
-        "bitrate": 3000000,
-        "resolution": "1920x1080"
-    },
-    "4K": {
-        "bitrate": 10000000,
-        "resolution": "3840x2160"
-    }
-}
+const qualities = require("./qualities.json")
+console.log("USING QUALITY LEVELS:")
+console.log(JSON.stringify(qualities, null, 2))
 
 function tickCache(interval) {
     for (let c in cache) {
