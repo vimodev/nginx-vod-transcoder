@@ -49,4 +49,4 @@ docker build -t vimodev/nginx-vod-transcoder .
 
 Architecture
 -------------
-The nginx config splits any .ts segment requests such that they go to a node server which calls the original vod module and transcodes the results which it forwards to the client.
+The node server acts as a reverse proxy between the client and the nginx-vod server. It edits m3u8 playlists to provide multiple qualities for a single file. It transcodes proxy'd segments based on the quality specified in the query of the url.
