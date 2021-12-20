@@ -9,7 +9,40 @@ Pull the image with `docker pull vimodev/nginx-vod-transcoder`.
 
 Run the image with `docker run --name transcoder -d -p 80:80 -v /path/to/your/videos/:/opt/static/videos:ro vimodev/nginx-vod-transcoder:latest`
 
-To use custom quality levels mount a `.json` as follows `docker run --name transcoder -d -p 80:80 -v /path/to/your/videos/:/opt/static/videos:ro -v /path/to/config.json:/transcoder/qualities.json vimodev/nginx-vod-transcoder:latest`. An example `json` configuration can be found in `exampleQualities.json`. This is NOT robust.
+To use custom settings mount a `.json` as follows `docker run --name transcoder -d -p 80:80 -v /path/to/your/videos/:/opt/static/videos:ro -v /path/to/config.json:/transcoder/config.json vimodev/nginx-vod-transcoder:latest`. An example `json` configuration is as follows (these are default settings):
+
+```
+// If you are copying this, make sure to remove the comments since they make for an invalid config
+{
+    // Cache settings
+    // Set maxSize to 0 to disable cache
+    "cache": {
+        "maxSize": 5000, // max cache size in MB (10^6)
+        "expiration": 300, // entries expire after x seconds
+        "interval": 5 // when to check for expirations, seconds
+    },
+    // Quality settings, Source is always available
+    // Name : { bitrate, resolution }
+    "qualities": {
+        "360p": { // Key is the name of the quality level
+            "bitrate": 500000, // Bitrate in bps
+            "resolution": "640x360" // Resolution w x h
+        },
+        "720p": {
+            "bitrate": 1500000,
+            "resolution": "1280x720"
+        },
+        "1080p": {
+            "bitrate": 3000000,
+            "resolution": "1920x1080"
+        },
+        "4K": {
+            "bitrate": 10000000,
+            "resolution": "3840x2160"
+        }
+    }
+}
+```
 
 Input `http://<server>/hls/subfolder/video.mp4/master.m3u8` into any `hls` video player to play the video `/path/to/your/videos/subfolder/video.mp4`.
 
