@@ -22,19 +22,19 @@ const cacheTickInterval = 5000
 
 const qualities = {
     "360p": {
-        "bitrate": 1000000,
+        "bitrate": 500000,
         "resolution": "640x360"
     },
     "720p": {
-        "bitrate": 3500000,
+        "bitrate": 1500000,
         "resolution": "1280x720"
     },
     "1080p": {
-        "bitrate": 7000000,
+        "bitrate": 3000000,
         "resolution": "1920x1080"
     },
     "4K": {
-        "bitrate": 14000000,
+        "bitrate": 10000000,
         "resolution": "3840x2160"
     }
 }

@@ -19,10 +19,10 @@ Detailed:
 
 Take an example video at `path/to/your/videos/subfolder/video.mp4`. We can then get the master `m3u8` playlist that contains the different qualities depending on the source quality. If the source video is 4Mbps, only options with a bitrate of lower than 4Mbps are available.
 - Source: source
-- 360p: 640x360 @ 1 Mbps
-- 720p: 1280x720 @ 3.5 Mbps
-- 1080p: 1920x1080 @ 7 Mbps
-- 4K: 3840x2160 @ 14 Mbps
+- 360p: 640x360 @ 500 kbps
+- 720p: 1280x720 @ 1.5 Mbps
+- 1080p: 1920x1080 @ 3 Mbps
+- 4K: 3840x2160 @ 10 Mbps
 
 To get the master playlist for `path/to/your/videos/subfolder/video.mp4`, we `GET http://<server>:port/hls/subfolder/video.mp4/master.m3u8`, which can yield for instance the following `m3u8`:
 
