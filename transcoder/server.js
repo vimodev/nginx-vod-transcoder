@@ -8,6 +8,8 @@ const cors = require('cors')
 const { spawn } = require('child_process')
 const url = require('url')
 
+var cache = require('./cache')
+
 const settings = require('./settings.json')
 
 const upstreamHostname = 'localhost'
@@ -17,66 +19,17 @@ const app = express()
 app.use(cors())
 const port = 8081
 
-var cache = {}
-var cacheSize = 0
-
-
 const qualities = settings.qualities
 console.log("USING SETTINGS:")
 console.log(JSON.stringify(settings, null, 2))
 
-function tickCache() {
-    for (let c in cache) {
-        cache[c].expiration -= settings.cache.interval
-        if (cache[c].expiration <= 0) {
-            cacheSize -= cache[c].size
-            try {
-                fs.unlinkSync(cache[c].file)
-            } catch (err) {
-                console.log(err)
-            }
-            delete cache[c]
-        }
-    }
-    setTimeout(() => tickCache(), settings.cache.interval * 1000)
-}
+setTimeout(() => cache.tickCache(), settings.cache.interval * 1000)
 
-setTimeout(() => tickCache(), settings.cache.interval * 1000)
-
-function removeOldestCacheEntry() {
-    let minimum = settings.cache.expiration + 1
-    let current = undefined
-    for (let c in cache) {
-        if (cache[c].expiration < minimum) {
-            minimum = cache[c].expiration
-            current = c
-        }
-    }
-    cacheSize -= cache[current].size
-    try {
-        fs.unlinkSync(cache[current].file)
-    } catch (err) {
-        console.log(err)
-    }
-    delete cache[current]
-}
-
-async function addToCache(url, file) {
-    console.log(`Adding ${url} to cache`)
-    var stats = fs.statSync(file)
-    cache[url] = {
-        expiration: settings.cache.expiration,
-        size: stats.size,
-        file: file
-    }
-    cacheSize += stats.size
-    while (cacheSize > settings.cache.maxSize * 1000000) {
-        removeOldestCacheEntry()
-    }
-    console.log(`Cache size: ${cacheSize / 1000000} MB`)
-}
-
-// Pipe a stream into a string of utf-8
+/**
+ * Convert a character stream into a string
+ * @param {*} stream 
+ * @returns string of stream
+ */
 function streamToString (stream) {
     const chunks = [];
     return new Promise((resolve, reject) => {
@@ -86,19 +39,26 @@ function streamToString (stream) {
     })
 }
 
+/**
+ * Given a request for a segment, handle it.
+ * @param {*} req Request
+ * @param {*} res Response
+ */
 function handleSegmentRequest(req, res) {
     console.log(`Handling segment request ${req.url}`)
-    if (req.url in cache) {
+    // Check if the request is in the cache
+    if (req.url in cache.cache) {
         console.log(`Found ${req.url} in cache`)
-        cache[req.url].expiration = settings.cache.expiration
-        res.sendFile(cache[req.url].file)
+        cache.cache[req.url].expiration = settings.cache.expiration
+        res.sendFile(cache.cache[req.url].file)
         return
     }
+    // Determine quality
     let quality = req.query.quality
     if (quality == undefined) quality = "Source"
     if (!(quality in qualities)) qual = "Source"
     let path = url.parse(req.url).pathname
-    // Open temp file
+    // Open temporary file
     const tempFile = tmp.tmpNameSync() + '.ts'
     const fd = fs.openSync(tempFile, 'w')
     fs.closeSync(fd)
@@ -112,7 +72,7 @@ function handleSegmentRequest(req, res) {
             Host: req.get("Host")
         }
     }
-    // Request the resource
+    // Request the resource from upstream nginx-vod-module
     const request = http.get(options, function(response) {
         // Pipe the response to the file
         response.pipe(stream)
@@ -120,6 +80,7 @@ function handleSegmentRequest(req, res) {
         stream.on('finish', () => {
             // Close the stream
             stream.close()
+            // If Source quality, we dont have to transcode and just send it
             if (quality == "Source") {
                 res.sendFile(tempFile)
                 setTimeout(() => {
@@ -131,13 +92,14 @@ function handleSegmentRequest(req, res) {
                 }, 5000)
                 return
             }
-            // Let ffmpeg do its work
+            // Otherwise we transcode the segment based on selected quality
             const outFile = tmp.tmpNameSync() + '.ts'
             const q = qualities[quality]
             const child = spawn('ffmpeg', ['-i', tempFile, '-vcodec', 'libx264', '-b:v', `${q.bitrate}`,'-acodec', 'copy', '-s', q.resolution.replace('x', ':'), 
                                             '-copyts', '-muxdelay', '0', outFile])
+            // When transcoding is done we add the result to the cache and send it
             child.on('close', () => {
-                if (settings.cache.maxSize > 0) addToCache(req.url, outFile)
+                if (settings.cache.maxSize > 0) cache.addToCache(req.url, outFile)
                 // Send the output
                 res.sendFile(outFile)
                 // Delete the files
@@ -154,7 +116,12 @@ function handleSegmentRequest(req, res) {
     })
 }
 
-// Parse a line from m3u8 to get the bandwidth
+/**
+ * Parse a line from upstream m3u8 response to get 
+ * the bandwidth of the source file.
+ * @param {*} line information line in m3u8 file
+ * @returns bitrate of the source file, in bits per second
+ */
 function getBandwidthFromLine(line) {
     let fields = line.split(',')
     for (let i = 0; i < fields.length; i++) {
@@ -164,15 +131,21 @@ function getBandwidthFromLine(line) {
     }
 }
 
-// Modify the master m3u8 file to provide different qualities
+/**
+ * Based on the qualities available, change the master.m3u8
+ * file to include those qualities as possible streams.
+ * @param {*} m3u8 
+ */
 function modifyMaster(m3u8) {
     let lines = m3u8.split('\n')
     let info = lines[1]
     let index = lines[2]
     let bitrate = getBandwidthFromLine(info)
+    // Include original start and source quality
     let output = "" + lines[0] + "\n"
     output += info + "\n"
     output += index + "?quality=Source" + "\n"
+    // Add each quality with a bitrate of less than the source
     for (const q in qualities) {
         let quality = qualities[q]
         if (quality.bitrate < bitrate) {
@@ -183,6 +156,11 @@ function modifyMaster(m3u8) {
     return output
 }
 
+/**
+ * Given a request for a master.m3u8, handle it
+ * @param {*} req request
+ * @param {*} res response
+ */
 function handleMasterRequest(req, res) {
     console.log(`Handling Master request ${req.url}`)
     let path = url.parse(req.url).pathname
@@ -194,17 +172,26 @@ function handleMasterRequest(req, res) {
             Host: req.get("Host")
         }
     }
+    // GET the upstream file
     http.get(options, (response) => {
         streamToString(response).then(function (result) {
+            // Respond with modified version
             res.send(modifyMaster(result))
         })
     })
 }
 
+/**
+ * Modify an index m3u8 based on quality that was requested.
+ * @param {*} m3u8 
+ * @param {*} quality 
+ * @returns 
+ */
 function modifyIndex(m3u8, quality) {
     if (quality == undefined) quality = "Source"
     let lines = m3u8.split('\n')
     for (let i = 0; i < lines.length; i++) {
+        // Append to each .ts uri a query of quality
         if (lines[i].includes(".ts")) {
             lines[i] += "?quality=" + quality
         }
@@ -212,6 +199,11 @@ function modifyIndex(m3u8, quality) {
     return lines.join('\n')
 }
 
+/**
+ * Given a request for a index.m3u8, handle it
+ * @param {*} req 
+ * @param {*} res 
+ */
 function handleIndexRequest(req, res) {
     console.log(`Handling Index request ${req.url}`)
     let path = url.parse(req.url).pathname
@@ -230,6 +222,11 @@ function handleIndexRequest(req, res) {
     })
 }
 
+/**
+ * Given a request starting with /hls, handle it
+ * @param {*} req 
+ * @param {*} res 
+ */
 function handleHLS(req, res) {
     let path = url.parse(req.url).pathname
     if (path.endsWith('.ts')) {
@@ -243,6 +240,11 @@ function handleHLS(req, res) {
     }
 }
 
+/**
+ * Simply proxy the request to upstream nginx-vod
+ * @param {*} req 
+ * @param {*} res 
+ */
 function proxy(req, res) {
     let path = url.parse(req.url).pathname
     const options = {
@@ -262,7 +264,7 @@ app.get('*', (req, res) => {
     if (path.startsWith('/hls')) {
         handleHLS(req, res)
     } else if (path.startsWith('/cache')) {
-        res.json({size: cacheSize, cache: cache})
+        res.json({size: cache.getCacheSize(), cache: cache.cache})
     } else {
         proxy(req, res)
     } 
