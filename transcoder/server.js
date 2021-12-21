@@ -26,6 +26,15 @@ console.log(JSON.stringify(settings, null, 2))
 setTimeout(() => cache.tickCache(), settings.cache.interval * 1000)
 
 /**
+ * Is the status code good?
+ * @param {*} code 
+ * @returns 
+ */
+function goodStatus(code) {
+    return (200 <= code && code <= 299)
+}
+
+/**
  * Convert a character stream into a string
  * @param {*} stream 
  * @returns string of stream
@@ -74,6 +83,12 @@ function handleSegmentRequest(req, res) {
     }
     // Request the resource from upstream nginx-vod-module
     const request = http.get(options, function(response) {
+        res.status(response.statusCode)
+        // Check if OK
+        if (!goodStatus(response.statusCode)) {
+            response.pipe(res)
+            return
+        }
         // Pipe the response to the file
         response.pipe(stream)
         // When done
@@ -174,10 +189,15 @@ function handleMasterRequest(req, res) {
     }
     // GET the upstream file
     http.get(options, (response) => {
-        streamToString(response).then(function (result) {
-            // Respond with modified version
-            res.send(modifyMaster(result))
-        })
+        res.status(response.statusCode)
+        if (goodStatus(response.statusCode)) {
+            streamToString(response).then(function (result) {
+                // Respond with modified version
+                res.send(modifyMaster(result))
+            })
+        } else {
+            response.pipe(res)
+        }
     })
 }
 
@@ -216,9 +236,14 @@ function handleIndexRequest(req, res) {
         }
     }
     http.get(options, (response) => {
-        streamToString(response).then(function (result) {
-            res.send(modifyIndex(result, req.query.quality))
-        })
+        res.status(response.statusCode)
+        if (goodStatus(response.statusCode)) {
+            streamToString(response).then(function (result) {
+                res.send(modifyIndex(result, req.query.quality))
+            })
+        } else {
+            response.pipe(res)
+        }
     })
 }
 
@@ -236,7 +261,7 @@ function handleHLS(req, res) {
     } else if (path.endsWith('index-v1-a1.m3u8') || path.endsWith('index-v1.m3u8')) {
         handleIndexRequest(req, res)
     } else {
-        res.status(404)
+        proxy(req, res)
     }
 }
 
@@ -255,7 +280,10 @@ function proxy(req, res) {
             Host: req.get("Host")
         }
     }
-    http.get(options, (response) => response.pipe(res))
+    http.get(options, (response) => {
+        res.status(response.statusCode)
+        response.pipe(res)
+    })
 }
 
 // Handle all requests that come through
@@ -263,7 +291,7 @@ app.get('*', (req, res) => {
     let path = url.parse(req.url).pathname
     if (path.startsWith('/hls')) {
         handleHLS(req, res)
-    } else if (path.startsWith('/cache')) {
+    } else if (path == '/cache') {
         res.json({size: cache.getCacheSize(), cache: cache.cache})
     } else {
         proxy(req, res)
