@@ -256,10 +256,17 @@ function handleHLS(req, res) {
     let path = url.parse(req.url).pathname
     if (path.endsWith('.ts')) {
         handleSegmentRequest(req, res)
-    } else if (path.endsWith('master.m3u8')) {
-        handleMasterRequest(req, res)
-    } else if (path.endsWith('index-v1-a1.m3u8') || path.endsWith('index-v1.m3u8')) {
-        handleIndexRequest(req, res)
+    } else if (path.endsWith('.m3u8')) {
+        let pathElements = path.split("/")
+        let leaf = pathElements[pathElements.length - 1]
+        console.log(leaf)
+        if (leaf.startsWith("master")) {
+            handleMasterRequest(req, res)
+        } else if (leaf.startsWith("index")) {
+            handleIndexRequest(req, res)
+        } else {
+            proxy(req, res)
+        }
     } else {
         proxy(req, res)
     }
